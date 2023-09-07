@@ -35,93 +35,70 @@ from sklearn.model_selection import GridSearchCV
 # Metrics
 from sklearn.metrics import r2_score, mean_squared_error, explained_variance_score
 
-def regression_metrics(y_train= y_train, predictions= predictions):
+###                ###
+# #     Metrics    # #
+###                ###
+
+def find_baseline(train, y_train):
+    '''
+    Sets and returns baseline.
+    '''
+    baseline = y_train.mean()
+    # baseline array serves as predictions for the baseline, to measure baseline RSME & R2
+    baseline_array = np.repeat(baseline, len(train))
+    return baseline, baseline_array
+
+def regression_metrics(y_train, predictions):
     '''
     Calculates regression model metrics using SKLearn's RMSE and R2.
+
+    Kwargs: y_train (df), predictions (df)
     '''
     
     rmse = mean_squared_error(y_train, predictions, squared = False)
     r2 = r2_score(y_train, predictions)
     return rmse, r2
 
-def OLS(x_train = x_train_scaled, y_train = y_train, x_validate):
+def metrics_dataframe(model,RMSE,R2):
     '''
-    Also returns validate set predictions in second return.
+    Keep track and automatically append data to compare models.
     '''
+    metrics_df = pd.DataFrame(data=[
+            {
+                'model':model,
+                'rmse':RMSE,
+                'r2':R2
+            }
+            ])
+    return metrics_df
 
-    lr1 = lr()
-    lr1.fit(x_train, y_train)
-    predictions = lr1.predict(x_train)
-    val_predictions = lr1.predict(x_validate)
-    rmse, r2 = regression_metrics(y_train, predictions)
-    intercept = lr1.intercept_
-    coef = lr1.coef_[0]
-    print(f'Ordinary Least Squares, RMSE: {rmse}')
-    print(f'Ordinary Least Squares, R2: {r2}')
-    print(f'Intercept: {intercept}')
-    print(f'Coefficient: {coef}')
-    return predictions, val_predictions
+def save_metrics(df, model, RMSE, R2):
+        df.loc[len(df)] = [model, RMSE, R2]
+        return df
 
-def Lars(x_train = x_train_scaled, y_train = y_train, x_validate):
-    '''
-    Also returns validate set predictions in second return.
-    '''
+###                  ###
+# #     Feature      # #
+###    Selection     ###
 
-    lars = LassoLars(alpha=0)
-    lars.fit(x_train, y_train)
-    predictions = lars.predict(x_train)
-    val_predictions = lars.predict(x_validate)
-    rmse, r2 = regression_metrics(y_train, predictions)
-    intercept = lars.intercept_
-    coef = lars.coef_
-    print(f'Ordinary Least Squares, RMSE: {rmse}')
-    print(f'Ordinary Least Squares, R2: {r2}')
-    print(f'Intercept: {intercept}')
-    print(f'Coefficient: {coef}')   
-    return predictions, val_predictions
-
-def Polynom(x_train = x_train_scaled, y_train = y_train, x_validate):
-    '''
-    Also returns validate set predictions in second return.
-    '''
-
-    pr = lr()
-    pr.fit(x_train, y_train)
-    predictions = pr.predict(x_train)
-    val_predictions = pr.predict(x_validate)
-    rmse, r2 = regression_metrics(y_train, predictions)
-    intercept = pr.intercept_
-    coef = pr.coef_
-    print(f'Ordinary Least Squares, RMSE: {rmse}')
-    print(f'Ordinary Least Squares, R2: {r2}')
-    print(f'Intercept: {intercept}')
-    print(f'Coefficient: {coef}')   
-    return predictions, val_predictions
-
-def GLM(x_train = x_train_scaled, y_train = y_train, power=2, x_validate):
-    '''
-    Also returns validate set predictions in second return.
-    '''
-
-    glm = TweedieRegressor(power = power)
-    glm.fit(x_train, y_train)
-    predictions = glm.predict(x_train)
-    val_predictions = glm.predicted(x_validate)
-    rmse, r2 = regression_metrics(y_train, predictions)
-    intercept = glm.intercept_
-    coef = glm.coef_
-    print(f'Ordinary Least Squares, RMSE: {rmse}')
-    print(f'Ordinary Least Squares, R2: {r2}')
-    print(f'Intercept: {intercept}')
-    print(f'Coefficient: {coef}')   
-    return predictions, val_predictions
-
-
-
-
-def rfe(x_train= x_train_scaled, y_train= y_train, k= 2):
+def rfe(x_train, y_train, model, k=2):
     # create the rfe object, indicating the ML object (lr) and the number of features I want to end up with. 
-    rfe = RFE(lr, n_features_to_select=n_features)
+    if model == 'ols':
+        model = lr()
+    elif model == 'lassolars':
+        model = LassoLars()
+    elif model == model.__contains__('glm'):
+        if model == ('glm0'):
+            model == TweedieRegressor(power=0)
+        elif model == ('glm1'):
+            model == TweedieRegressor(power=1)
+        elif model == ('glm2'):
+            model == TweedieRegressor(power=2)
+        elif model == ('glm3'):
+            model == TweedieRegressor('glm3')
+    else:
+        raise ValueError('Select a valid model.')
+    
+    rfe = RFE(model, n_features_to_select=k)
 
     # fit the data using RFE
     rfe.fit(x_train,y_train)  
@@ -134,7 +111,7 @@ def rfe(x_train= x_train_scaled, y_train= y_train, k= 2):
 
     return rfe_feature
 
-def select_kbest(x_train= x_train_scaled, y_train= y_train, k= 2):
+def select_kbest(x_train, y_train, k=2):
 
     # parameters: f_regression stats test, give me all features - normally in
     f_selector = SelectKBest(f_regression, k=k)#k='all')
@@ -148,3 +125,79 @@ def select_kbest(x_train= x_train_scaled, y_train= y_train, k= 2):
     f_feature = x_train.iloc[:,feature_mask].columns.tolist()
 
     return f_feature
+
+###              ###
+# #    Models    # #
+###              ###
+
+def OLS(x_train, y_train, x_validate):
+    '''
+    Also returns validate set predictions in second return.
+    '''
+
+    lr1 = lr()
+    lr1.fit(x_train, y_train)
+    predictions = lr1.predict(x_train)
+    val_predictions = lr1.predict(x_validate)
+    rmse, r2 = regression_metrics(y_train, predictions)
+    intercept = lr1.intercept_
+    coef = lr1.coef_[0]
+    print(f'RMSE: {rmse}')
+    print(f'R2: {r2}')
+    print(f'Intercept: {intercept}')
+    print(f'Coefficient: {coef}')
+    return predictions, val_predictions
+
+def Lars(x_train, y_train, x_validate):
+    '''
+    Also returns validate set predictions in second return.
+    '''
+
+    lars = LassoLars(alpha=0)
+    lars.fit(x_train, y_train)
+    predictions = lars.predict(x_train)
+    val_predictions = lars.predict(x_validate)
+    rmse, r2 = regression_metrics(y_train, predictions)
+    intercept = lars.intercept_
+    coef = lars.coef_[0]
+    print(f'RMSE: {rmse}')
+    print(f'R2: {r2}')
+    print(f'Intercept: {intercept}')
+    print(f'Coefficient: {coef}')   
+    return predictions, val_predictions
+
+def Polynom(x_train, y_train, x_validate):
+    '''
+    Also returns validate set predictions in second return.
+    '''
+
+    pr = lr()
+    pr.fit(x_train, y_train)
+    predictions = pr.predict(x_train)
+    val_predictions = pr.predict(x_validate)
+    rmse, r2 = regression_metrics(y_train, predictions)
+    intercept = pr.intercept_
+    coef = pr.coef_[0]
+    print(f'RMSE: {rmse}')
+    print(f'R2: {r2}')
+    print(f'Intercept: {intercept}')
+    print(f'Coefficient: {coef}')   
+    return predictions, val_predictions
+
+def GLM(x_train, y_train, x_validate,  power=2):
+    '''
+    Also returns validate set predictions in second return.
+    '''
+
+    glm = TweedieRegressor(power = power)
+    glm.fit(x_train, y_train)
+    predictions = glm.predict(x_train)
+    val_predictions = glm.predicted(x_validate)
+    rmse, r2 = regression_metrics(y_train, predictions)
+    intercept = glm.intercept_
+    coef = glm.coef_[0]
+    print(f'RMSE: {rmse}')
+    print(f'R2: {r2}')
+    print(f'Intercept: {intercept}')
+    print(f'Coefficient: {coef}')   
+    return predictions, val_predictions

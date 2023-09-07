@@ -22,8 +22,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 # Metrics
 
-
-
 # fips = county
 #6037 - LA
 #6059 - orange
@@ -47,10 +45,12 @@ def zillow(database='zillow',user=env.user, password=env.password, host=env.host
         # pulling data from mysql
         print('No file exists, extracting from MySQL.')
 
-        query = 'SELECT bedroomcnt, bathroomcnt, calculatedfinishedsquarefeet, taxvaluedollarcnt,\
-                yearbuilt, taxamount, fips, propertylandusetypeid\
-                FROM properties_2017\
-                WHERE propertylandusetypeid = 261'
+        query = '''SELECT bedroomcnt, bathroomcnt, calculatedfinishedsquarefeet, taxvaluedollarcnt,
+                yearbuilt, taxamount, fips, propertylandusetypeid, transactiondate
+                FROM properties_2017 as p
+                LEFT JOIN predictions_2017 as pd
+                ON p.id = pd.id
+                WHERE propertylandusetypeid = 261'''
         connection = f'mysql+pymysql://{user}:{password}@{host}/{database}'
         zillow = pd.read_sql(query, connection)
 
@@ -71,6 +71,9 @@ def zillow(database='zillow',user=env.user, password=env.password, host=env.host
         zillow = zillow.loc[:,~zillow.columns.duplicated()].copy()
         
         # normalizing numerical data
+        # encode categorical data
+        dummies = pd.get_dummies(zillow['county'],dtype=int)
+        zillow = pd.concat([zillow, dummies], axis=1)
         # EXAMPLE: telco['total_charges'] = telco['total_charges'].str.replace(' ','0').astype('float')
 
         # additional columns for visualization
@@ -80,7 +83,7 @@ def zillow(database='zillow',user=env.user, password=env.password, host=env.host
         
         
         # dropping extra columns
-        zillow = zillow.drop(columns=['propertylandusetypeid','taxamount'])
+        zillow = zillow.drop(columns=['propertylandusetypeid','taxamount','transactiondate'])
         # restoring 'drop_first' column for contract_type as it is desired to specify just this value type (without deducting)
 
         # lowering all column names
@@ -153,52 +156,6 @@ def summarize(df):
     # Sort the resulting dataframe by the 'Number of Unique Values' column in ascending order
     return check_columns
 
-### SCALER ###
-def QuickScale(x_train, x_validate, x_test, linear=True, scaler='MinMax'):
-    '''
-    Produces data scaled with each respective style, will utilize all unless specificied otherwise.
-
-    Arguments: x_train = desired data frame; and respected validate and test, Linear= True or False
-
-    Returns: 6 or 2 arrays that would need to be assigned
-    '''
-    # Check for linear keyword argument to choose how to scale.
-    if linear==True:
-        mmscaler = MinMaxScaler()
-        nscaler = StandardScaler()
-        rscaler = RobustScaler()
-    else:
-        # Non Linear Scaler 
-        qscaler = QuantileTransformer()
-        # train
-        x_train_scaled = qscaler.fit_transform(x_train.copy())
-        # validate
-        x_val_scaled = qscaler.transform(x_validate.copy())
-        # test
-        x_test_scaled = qscaler.transform(x_test.copy())
-        return x_train_scaled, x_val_scaled, x_test_scaled
-
-        ##### change scaler to be kwarg to reduce output -- , scaler= #####
-
-        # stored variables for associated fit x_train & transformed x_train & x_validate
-        # train
-    if type == 'MinMax':
-        x_train_scaled = mmscaler.fit_transform(x_train.copy())
-        x_val_scaled = mmscaler.fit_transform(x_train.copy())
-        x_test_scaled = mmscaler.fit_transform(x_train.copy())
-        return x_train_scaled, x_val_scaled, x_test_scaled
-
-    elif type == 'Standard':
-        x_train_scaled = nscaler.transform(x_validate.copy())
-        x_val_scaled = nscaler.transform(x_validate.copy)
-        x_test_scaled = nscaler.transform(x_validate.copy)
-        return x_train_scaled, x_val_scaled, x_test_scaled
-
-    else:
-        x_train_scaled = rscaler.transform(x_test.copy)
-        x_val_scaled = rscaler.transform(x_test.copy)
-        x_test_scaled = rscaler.transform(x_test.copy)
-        return x_train_scaled, x_val_scaled, x_test_scaled
 
 
 def organize_columns(train):
@@ -222,3 +179,82 @@ def organize_columns(train):
             else:
                 num_cols.append(col)
     return cat_cols, num_cols
+
+def check_cat_distribution(df,target='tax_value'):
+    '''
+    Loop through a df and check their respective distributions.
+    This is to be used with categorical datatypes, since the only 
+    plot used is a countplot, with a target used as the hue to compare.
+    '''
+    
+    for col in df:
+        plt.figure(figsize=(12.5,8))
+        sns.countplot(data=df,x=col,alpha=0.8,linewidth=.4,edgecolor='black')
+        plt.title(col)
+        plt.show()
+        print('''-------------------------------------------------------------''')\
+    
+
+def check_num_distribution(df,dataset='train',target='tax_value'):
+    '''
+    Loop through a df and check their respective distributions.
+    This is to be used with numerical datatypes, since the 
+    plots used are hist plot and box plot, with a target used as the hue to compare.
+    '''
+    for col in df:
+        sns.histplot(data=dataset, x=df[col],hue='tax_value')
+        t = col.lower()
+        plt.title(t)
+        plt.show()
+        sns.boxplot(data=dataset, x=col,hue='tax_value')
+        plt.title(t)
+        plt.show()
+        print('''-------------------------------------------------------------''')
+
+###               ###
+# #     Scaler    # #
+###               ###
+
+def QuickScale(x_train, x_validate, x_test, linear=True, scaler='MinMax'):
+    '''
+    Produces data scaled with each respective style, will utilize all unless specificied otherwise.
+
+    Arguments: x_train = desired data frame; and respected validate and test, Linear= True or False
+
+    Returns: 6 or 2 arrays that would need to be assigned
+    '''
+    # Check for linear keyword argument to choose how to scale.
+    if linear==True:
+        mmscaler = MinMaxScaler()
+        nscaler = StandardScaler()
+        rscaler = RobustScaler()
+    else:
+        # Non Linear Scaler 
+        qscaler = QuantileTransformer()
+        # train
+        x_train_scaled = qscaler.fit_transform(x_train)
+        # validate
+        x_val_scaled = qscaler.transform(x_validate)
+        # test
+        x_test_scaled = qscaler.transform(x_test)
+        return x_train_scaled, x_val_scaled, x_test_scaled
+
+        ##### change scaler to be kwarg to reduce output -- , scaler= #####
+        # train
+    if type == 'MinMax':
+        x_train_scaled = mmscaler.fit_transform(x_train)
+        x_val_scaled = mmscaler.transform(x_validate)
+        x_test_scaled = mmscaler.transform(x_test)
+        return x_train_scaled, x_val_scaled, x_test_scaled
+
+    elif type == 'Standard':
+        x_train_scaled = nscaler.fit_transform(x_train)
+        x_val_scaled = nscaler.transform(x_validate)
+        x_test_scaled = nscaler.transform(x_test)
+        return x_train_scaled, x_val_scaled, x_test_scaled
+
+    else:
+        x_train_scaled = rscaler.fit_transform(x_train)
+        x_val_scaled = rscaler.transform(x_validate)
+        x_test_scaled = rscaler.transform(x_test)
+        return x_train_scaled, x_val_scaled, x_test_scaled
