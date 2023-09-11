@@ -55,9 +55,13 @@ def zillow(database='zillow',user=env.user, password=env.password, host=env.host
         connection = f'mysql+pymysql://{user}:{password}@{host}/{database}'
         zillow = pd.read_sql(query, connection)
 
+        # removing outliers
+        zillow = zillow[zillow.tax_value < 2000000]
+
         # Dropping of bedroomcnt, bathroomcnt values where they are 0
         zillow['bedroomcnt'][zillow['bedroomcnt'] == 0].replace(0, np.nan,inplace=True)
         zillow['bathroomcnt'][zillow['bathroomcnt'] == 0].replace(0, np.nan, inplace=True)
+        
         # Null values determined to not be worth altering as all are > 1%
         zillow = zillow.dropna()
 
@@ -129,7 +133,8 @@ def zillow_post(database='zillow',user=env.user, password=env.password, host=env
         # rename columns
         zillow = zillow.rename(columns={'fips':'county', 'taxvaluedollarcnt':'tax_value','calculatedfinishedsquarefeet':'sq_feet'})
         zillow['county'] = zillow['county'].map({6037:'LA',6059:'Orange',6111:'Ventura'})
-
+        # removing outliers
+        zillow = zillow[zillow.tax_value < 2000000]
         # changing value types
         zillow['yearbuilt'] = zillow['yearbuilt'].astype(int)
         zillow['bedroomcnt'] = zillow['bedroomcnt'].astype(int)
@@ -259,9 +264,9 @@ def check_cat_distribution(df,target='tax_value'):
     for col in df:
         plt.figure(figsize=(12.5,8))
         sns.countplot(data=df,x=col,alpha=0.8,linewidth=.4,edgecolor='black')
-        plt.title(col)
+        plt.title('# of Observations by County')
         plt.show()
-        print('''-------------------------------------------------------------''')\
+        #print('''-------------------------------------------------------------''')\
     
 
 def check_num_distribution(df,dataset='train',target='tax_value'):

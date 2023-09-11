@@ -82,7 +82,7 @@ def t_test(feature, compare):
 
     return check_p(p)
 
-def plot_residuals(x_train, y_train, yhat, baseline):
+def plot_residuals(train, x_train, y_train, yhat, baseline):
     '''
     '''
 

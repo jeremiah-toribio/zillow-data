@@ -170,11 +170,15 @@ def Polynom(x_train, y_train, x_validate, y_validate):
     '''
     Also returns validate set predictions in second return.
     '''
-
+    pf = PolynomialFeatures(degree=4)
     pr = lr()
-    pr.fit(x_train, y_train)
-    predictions = pr.predict(x_train)
-    val_predictions = pr.predict(x_validate)
+
+    x_train_deg = pf.fit_transform(x_train)
+    x_validate_deg = pf.transform(x_validate)
+
+    pr.fit(x_train_deg, y_train)
+    predictions = pr.predict(x_train_deg)
+    val_predictions = pr.predict(x_validate_deg)
     rmse, r2 = regression_metrics(y_validate, val_predictions)
     intercept = pr.intercept_
     coef = pr.coef_[0]
