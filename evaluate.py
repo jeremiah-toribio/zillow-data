@@ -25,6 +25,63 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import r2_score, mean_squared_error, explained_variance_score
 
 
+def check_p(p):
+    '''
+    checks p value to see association to a, depending on outcome will print
+    relative statement
+    '''
+    α = .05
+    if p < α:
+        return print(f'We can reject the null hypothesis with a p-score of:',{p})
+    else:
+        return print(f'We fail to reject the null hypothesis with a p-score of:',{p})
+
+def check_correlation(feature, compare):
+    '''
+    - Shapiro's to check distribution
+    - After distribution is determined, use pearsons or spearman r 
+    '''
+    α = .05
+    sr,sp = stats.shapiro(feature)
+
+    if sp > α:
+        print(f"Normal distribution, using pearson r")
+        r, p = stats.pearsonr(compare, feature)
+        if p < α:
+            return print(f"""Reject the null hypothesis. There is a linear correlation.
+        Spearman’s r: {r:2f}
+        P-value: {p}""")
+        else:
+            return print(f"""We fail to reject the null hypothesis that there is a linear correlation.
+            Spearman’s r: {r:2f}
+            P-value: {p}""")
+    else:
+        print(f"NOT a normal distribution, spearman r")
+        r, p = stats.spearmanr(compare, feature)
+        if p < α:
+            return print(f"""Reject the null hypothesis. There is a linear correlation.
+        Pearson's r: {r:2f}
+        P-value: {p}""")
+        else:
+            return print(f"""We fail to reject the null hypothesis that there is a linear correlation.
+            Pearson's r: {r:2f}
+            P-value: {p}""")
+
+def t_test(feature, compare):
+    '''
+    '''
+    α = .05
+    lv, p = stats.levene(*samples, center='median', proportiontocut=0.05)
+
+    if p > α:
+        print(f'Equal Variance with a p-score of:{p}')
+        t_stat, p = stats.ttest_ind(feature,compare,equal_var=True)
+    else:
+        print(f'INNEQUAL Variance with a p-score of:{p}')
+        t_stat, p = stats.ttest_ind(feature,compare,equal_var=False)
+
+    return check_p(p)
+
 def plot_residuals(x_train, y_train, yhat, baseline):
     '''
     '''
@@ -32,8 +89,8 @@ def plot_residuals(x_train, y_train, yhat, baseline):
     residuals = x_train - yhat
     residuals_baseline = x_train - baseline
 
-    plt.scatter(x = x_train, y = y_train)
-    plt.plot(x = residuals, y = y_train)
+    sns.scatter(data = train,x = residuals, y = y_train)
+    #plt.plot(residuals, y_train)
 
     return
 
@@ -41,9 +98,11 @@ def regression_errors(x_train, y_train, yhat, baseline='mean'):
     '''
     '''
     if baseline == 'mean':
-        baseline = x_train.mean()
+        baseline = y_train.mean()
+    elif baseline == 'median':
+        baseline = y_train.median()
     else:
-        baseline = x_train.median()
+        raise ValueError(' Give a proper aggregation for baseline.')
     
     residuals = x_train - yhat
     residuals_baseline = x_train - baseline
@@ -75,8 +134,4 @@ def regression_errors(x_train, y_train, yhat, baseline='mean'):
     print("RMSE baseline = ", "{:.1f}".format(RMSE_baseline))
     print('~~ ~~ ~~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~~ ~~ ~~')
     return SSE, SSE_baseline, MSE, MSE_baseline, ESS, ESS_baseline, RMSE, RMSE_baseline
-
-
-def better_than_baseline(y,yhat):
-    SSE, ESS, TSS, MSS, RMSE = regression_errors
 

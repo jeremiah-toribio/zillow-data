@@ -30,6 +30,7 @@ from sklearn.model_selection import GridSearchCV
 # **************** FUNCTION TO GET SQL CONNECTION *****************
 # Create helper function to get the necessary connection url.
 
+
 def zillow(database='zillow',user=env.user, password=env.password, host=env.host):
     '''
     Pulls data from mySql server and drops duplicate columns and values (keeps 1 of needed)
@@ -51,6 +52,74 @@ def zillow(database='zillow',user=env.user, password=env.password, host=env.host
                 LEFT JOIN predictions_2017 as pd
                 ON p.id = pd.id
                 WHERE propertylandusetypeid = 261'''
+        connection = f'mysql+pymysql://{user}:{password}@{host}/{database}'
+        zillow = pd.read_sql(query, connection)
+
+        # Dropping of bedroomcnt, bathroomcnt values where they are 0
+        zillow['bedroomcnt'][zillow['bedroomcnt'] == 0].replace(0, np.nan,inplace=True)
+        zillow['bathroomcnt'][zillow['bathroomcnt'] == 0].replace(0, np.nan, inplace=True)
+        # Null values determined to not be worth altering as all are > 1%
+        zillow = zillow.dropna()
+
+        
+        # rename columns
+        zillow = zillow.rename(columns={'fips':'county', 'taxvaluedollarcnt':'tax_value','calculatedfinishedsquarefeet':'sq_feet'})
+        zillow['county'] = zillow['county'].map({6037:'LA',6059:'Orange',6111:'Ventura'})
+
+        # changing value types
+        zillow['yearbuilt'] = zillow['yearbuilt'].astype(int)
+        zillow['bedroomcnt'] = zillow['bedroomcnt'].astype(int)
+        zillow['sq_feet'] = zillow['sq_feet'].astype(int)
+        zillow['tax_value'] = zillow['tax_value'].astype(int)
+        
+        # removing duplicate columns
+        zillow = zillow.loc[:,~zillow.columns.duplicated()].copy()
+        
+        # normalizing numerical data
+        # encode categorical data
+        dummies = pd.get_dummies(zillow['county'],dtype=int)
+        zillow = pd.concat([zillow, dummies], axis=1)
+        # EXAMPLE: telco['total_charges'] = telco['total_charges'].str.replace(' ','0').astype('float')
+
+        # additional columns for visualization
+        
+        # engineered features
+
+        
+        
+        # dropping extra columns
+        zillow = zillow.drop(columns=['propertylandusetypeid','taxamount','transactiondate'])
+        # restoring 'drop_first' column for contract_type as it is desired to specify just this value type (without deducting)
+
+        # lowering all column names
+        zillow.columns = map(str.lower,zillow.columns)
+        zillow.columns = zillow.columns.str.replace(' ','_')
+
+        # cache data
+        zillow.to_csv('zillow.csv')
+    return zillow
+
+def zillow_post(database='zillow',user=env.user, password=env.password, host=env.host):
+    '''
+    Pulls data from mySql server and drops duplicate columns and values (keeps 1 of needed)
+    encodes all categorical data and drops columns that are unnecessary as a by product of 
+    new dummy columns.
+    '''
+    if os.path.isfile('zillow.csv'):
+        # If csv file exists read in data from csv file.
+        print('File exists, pulling from system.')
+        zillow = pd.read_csv('zillow.csv', index_col=0)
+        
+    else:
+        # pulling data from mysql
+        print('No file exists, extracting from MySQL.')
+
+        query = '''SELECT bedroomcnt, bathroomcnt, calculatedfinishedsquarefeet, taxvaluedollarcnt,
+                yearbuilt, taxamount, fips, propertylandusetypeid, transactiondate, garagetotalsqft, fireplacecnt
+                FROM properties_2017 as p
+                LEFT JOIN predictions_2017 as pd
+                ON p.id = pd.id
+                WHERE propertylandusetypeid = 261;'''
         connection = f'mysql+pymysql://{user}:{password}@{host}/{database}'
         zillow = pd.read_sql(query, connection)
 
@@ -241,20 +310,23 @@ def QuickScale(x_train, x_validate, x_test, linear=True, scaler='MinMax'):
 
         ##### change scaler to be kwarg to reduce output -- , scaler= #####
         # train
-    if type == 'MinMax':
+    if scaler == 'MinMax':
         x_train_scaled = mmscaler.fit_transform(x_train)
         x_val_scaled = mmscaler.transform(x_validate)
         x_test_scaled = mmscaler.transform(x_test)
         return x_train_scaled, x_val_scaled, x_test_scaled
 
-    elif type == 'Standard':
+    elif scaler == 'Standard':
         x_train_scaled = nscaler.fit_transform(x_train)
         x_val_scaled = nscaler.transform(x_validate)
         x_test_scaled = nscaler.transform(x_test)
         return x_train_scaled, x_val_scaled, x_test_scaled
 
-    else:
+    elif scaler == 'Robust':
         x_train_scaled = rscaler.fit_transform(x_train)
         x_val_scaled = rscaler.transform(x_validate)
         x_test_scaled = rscaler.transform(x_test)
         return x_train_scaled, x_val_scaled, x_test_scaled
+    
+    else:
+        raise ValueError('Select a valid scaler.')
